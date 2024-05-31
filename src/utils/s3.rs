@@ -41,6 +41,20 @@ pub fn generate_s3_list_objects_v2_response(
     writer.write(XmlEvent::characters(&prefix)).unwrap();
     writer.write(XmlEvent::end_element()).unwrap(); // Prefix
 
+    writer
+        .write(XmlEvent::start_element("IsTruncated"))
+        .unwrap();
+    writer.write(XmlEvent::characters("false")).unwrap();
+    writer.write(XmlEvent::end_element()).unwrap(); // IsTruncated
+
+    writer.write(XmlEvent::start_element("MaxKeys")).unwrap();
+    writer.write(XmlEvent::characters("1000")).unwrap();
+    writer.write(XmlEvent::end_element()).unwrap(); // MaxKeys
+
+    writer.write(XmlEvent::start_element("Marker")).unwrap();
+    writer.write(XmlEvent::characters("")).unwrap();
+    writer.write(XmlEvent::end_element()).unwrap(); // Marker (V1)
+
     if !files_only {
         for folder in objects.items.iter().filter(|item| item.folder.is_some()) {
             writer
