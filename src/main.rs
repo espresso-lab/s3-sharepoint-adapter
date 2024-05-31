@@ -1,5 +1,7 @@
 mod utils;
 
+use std::env;
+
 use dotenv::dotenv;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
@@ -10,6 +12,23 @@ use utils::s3::{generate_s3_list_objects_v2_response, GetObjectRequest, ListObje
 #[handler]
 async fn ok_handler(res: &mut Response) {
     res.status_code(StatusCode::OK).render(Text::Plain("OK"))
+}
+
+#[handler]
+async fn list_objects_v1(req: &mut Request, res: &mut Response) {
+    let prefix = req.query::<String>("prefix").unwrap_or("/".to_string());
+    let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
+    match list_azure_objects(site_id.clone(), prefix.clone(), None).await {
+        Ok(objects) => {
+            res.status_code(StatusCode::OK).render(Text::Xml(
+                generate_s3_list_objects_v2_response(site_id, prefix, objects, false),
+            ));
+        }
+        Err(err) => {
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR)
+                .render(Text::Plain(err.to_string()));
+        }
+    }
 }
 
 #[handler]
@@ -60,21 +79,16 @@ async fn get_object(req: &mut Request, res: &mut Response) {
     }
 }
 
-#[handler]
-async fn test(_req: &mut Request, _res: &mut Response) {
-    info!("test");
-}
-
 #[tokio::main]
 async fn main() {
     dotenv().ok();
     tracing_subscriber::fmt().init();
 
     let router = Router::new()
-        .hoop(test)
         .push(Router::with_path("status").get(ok_handler))
         .push(Router::with_path("/listObjectsV2").post(list_objects_v2))
         .push(Router::with_path("/getObject").post(get_object))
+        .get(list_objects_v1)
         .goal(ok_handler);
     let service = Service::new(router).hoop(Logger::new());
     let acceptor = TcpListener::new("0.0.0.0:3000").bind().await;
