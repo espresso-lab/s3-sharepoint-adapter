@@ -53,7 +53,7 @@ pub fn generate_s3_list_objects_v2_response(
 
     writer.write(XmlEvent::start_element("Marker")).unwrap();
     writer.write(XmlEvent::characters("")).unwrap();
-    writer.write(XmlEvent::end_element()).unwrap(); // Marker (V1)
+    writer.write(XmlEvent::end_element()).unwrap(); // Marker
 
     if !files_only {
         for folder in objects.items.iter().filter(|item| item.folder.is_some()) {

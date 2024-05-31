@@ -110,6 +110,7 @@ pub async fn get_token() -> Result<String, Error> {
 pub async fn list_azure_objects(
     site_id: String,
     prefix: String,
+    max_keys: i16,
     search_query: Option<String>,
 ) -> Result<SharePointObjects, Error> {
     let search_query = search_query.unwrap_or("".to_string());
@@ -117,8 +118,8 @@ pub async fn list_azure_objects(
         Ok(token) => {
             let relative_path = prepare_prefix(prefix, search_query);
             let url = format!(
-                "https://graph.microsoft.com/v1.0/sites/{}/drive/root:{}",
-                site_id, relative_path
+                "https://graph.microsoft.com/v1.0/sites/{}/drive/root:{}?$top={}",
+                site_id, relative_path, max_keys
             );
             let client = Client::new();
             match client
@@ -131,7 +132,10 @@ pub async fn list_azure_objects(
                 .await
             {
                 Ok(objects) => Ok(objects),
-                Err(err) => Err(err),
+                Err(err) => {
+                    println!("{}", err.to_string());
+                    Err(err)
+                }
             }
         }
         Err(err) => Err(err),
