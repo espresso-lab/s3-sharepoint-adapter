@@ -20,6 +20,11 @@ async fn bad_request_handler(res: &mut Response) {
 }
 
 #[handler]
+async fn head_handler(res: &mut Response) {
+    res.status_code(StatusCode::OK);
+}
+
+#[handler]
 async fn list_objects_v1(req: &mut Request, res: &mut Response) {
     let prefix = req
         .query::<String>("prefix")
@@ -67,6 +72,7 @@ async fn main() {
     tracing_subscriber::fmt().init();
 
     let router = Router::new()
+        .push(Router::with_path("<**path>").head(head_handler))
         .push(Router::with_path("status").get(ok_handler))
         .push(
             Router::with_filter_fn(|req, _| req.query::<i8>("list-type").unwrap_or(0).eq(&2))
