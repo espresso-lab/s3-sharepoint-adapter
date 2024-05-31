@@ -1,0 +1,32 @@
+@port=3000
+@hostname=http://localhost:{{port}}
+
+
+### POST /listObjectsV2
+POST {{hostname}}/listObjectsV2
+Content-Type: application/json
+
+{
+  "bucket": "site-id",
+  "prefix": "/folder path"
+}
+
+
+### POST /listObjectsV2 (with search_query)
+POST {{hostname}}/listObjectsV2
+Content-Type: application/json
+
+{
+  "bucket": "site-id",
+  "prefix": "/folder path",
+  "search_query": "Übersicht"
+}
+
+### GET /getObject
+POST {{hostname}}/getObject
+Content-Type: application/json
+
+{
+  "bucket": "site-id",
+  "key": "/folder path/file.pdf"
+}
