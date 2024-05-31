@@ -1,6 +1,6 @@
 mod utils;
 
-use std::env;
+use std::{env, result};
 
 use dotenv::dotenv;
 use salvo::http::StatusCode;
@@ -25,7 +25,13 @@ async fn head_handler(req: &mut Request, res: &mut Response) {
     let key = req.params().get("**path").cloned().unwrap_or_default();
     match head_azure_object(site_id.clone(), key.clone()).await {
         Ok(result) => {
-            res.status_code(result);
+            if result == StatusCode::NOT_FOUND {
+                res.headers_mut()
+                    .insert("Content-Length", "0".parse().unwrap());
+                res.headers_mut()
+                    .insert("Content-Type", "application/octet-stream".parse().unwrap());
+            }
+            res.status_code(StatusCode::OK);
         }
         Err(err) => {
             res.status_code(StatusCode::INTERNAL_SERVER_ERROR)
