@@ -5,7 +5,6 @@ use std::env;
 use dotenv::dotenv;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
-use tracing::info;
 use utils::azure::{get_azure_object, list_azure_objects};
 use utils::s3::{generate_s3_list_objects_v2_response, GetObjectRequest, ListObjectsV2Request};
 
@@ -64,6 +63,23 @@ async fn list_objects_v2(req: &mut Request, res: &mut Response) {
 }
 
 #[handler]
+async fn get_object_v1(req: &mut Request, res: &mut Response) {
+    let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
+    let key = req.params().get("**path").cloned().unwrap_or_default();
+    match get_azure_object(site_id.clone(), key.clone()).await {
+        Ok(result) => {
+            res.headers_mut()
+                .insert("Content-Type", result.content_type.parse().unwrap());
+            let _ = res.write_body(result.data);
+        }
+        Err(err) => {
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR)
+                .render(Text::Plain(err.to_string()));
+        }
+    }
+}
+
+#[handler]
 async fn get_object(req: &mut Request, res: &mut Response) {
     let payload = req.parse_json::<GetObjectRequest>().await.unwrap();
     match get_azure_object(payload.bucket.clone(), payload.key.clone()).await {
@@ -88,6 +104,7 @@ async fn main() {
         .push(Router::with_path("status").get(ok_handler))
         .push(Router::with_path("/listObjectsV2").post(list_objects_v2))
         .push(Router::with_path("/getObject").post(get_object))
+        .push(Router::with_path("<**key>").get(get_object_v1))
         .get(list_objects_v1)
         .goal(ok_handler);
     let service = Service::new(router).hoop(Logger::new());
