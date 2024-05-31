@@ -1,22 +1,7 @@
 use super::azure::SharePointObjects;
-use serde::Deserialize;
 use std::io::Cursor;
 use xml::writer::XmlEvent;
 use xml::EmitterConfig;
-
-#[derive(Deserialize, Clone)]
-pub struct ListObjectsV2Request {
-    pub bucket: String,
-    pub prefix: Option<String>,
-    pub max_keys: Option<usize>,
-    pub search_query: Option<String>,
-}
-
-#[derive(Deserialize, Clone)]
-pub struct GetObjectRequest {
-    pub bucket: String,
-    pub key: String,
-}
 
 pub fn generate_s3_list_objects_v2_response(
     bucket: String,
@@ -61,7 +46,12 @@ pub fn generate_s3_list_objects_v2_response(
                 .write(XmlEvent::start_element("CommonPrefixes"))
                 .unwrap();
             writer.write(XmlEvent::start_element("Prefix")).unwrap();
-            writer.write(XmlEvent::characters(&folder.name)).unwrap();
+            writer
+                .write(XmlEvent::characters(&format!(
+                    "{}/{}",
+                    &prefix, &folder.name
+                )))
+                .unwrap();
             writer.write(XmlEvent::end_element()).unwrap(); // Prefix
             writer.write(XmlEvent::end_element()).unwrap(); // CommonPrefixes
         }
@@ -71,7 +61,9 @@ pub fn generate_s3_list_objects_v2_response(
         writer.write(XmlEvent::start_element("Contents")).unwrap();
 
         writer.write(XmlEvent::start_element("Key")).unwrap();
-        writer.write(XmlEvent::characters(&item.name)).unwrap();
+        writer
+            .write(XmlEvent::characters(&format!("{}/{}", &prefix, &item.name)))
+            .unwrap();
         writer.write(XmlEvent::end_element()).unwrap(); // Key
 
         writer.write(XmlEvent::start_element("Size")).unwrap();

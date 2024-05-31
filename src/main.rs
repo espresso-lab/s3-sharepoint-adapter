@@ -5,8 +5,8 @@ use std::env;
 use dotenv::dotenv;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
-use utils::azure::{get_azure_object, list_azure_objects};
-use utils::s3::{generate_s3_list_objects_v2_response, GetObjectRequest, ListObjectsV2Request};
+use utils::azure::{get_azure_object_data, head_azure_object, list_azure_objects};
+use utils::s3::generate_s3_list_objects_v2_response;
 
 #[handler]
 async fn ok_handler(res: &mut Response) {
@@ -20,8 +20,18 @@ async fn bad_request_handler(res: &mut Response) {
 }
 
 #[handler]
-async fn head_handler(res: &mut Response) {
-    res.status_code(StatusCode::OK);
+async fn head_handler(req: &mut Request, res: &mut Response) {
+    let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
+    let key = req.params().get("**path").cloned().unwrap_or_default();
+    match head_azure_object(site_id.clone(), key.clone()).await {
+        Ok(result) => {
+            res.status_code(result);
+        }
+        Err(err) => {
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR)
+                .render(Text::Plain(err.to_string()));
+        }
+    }
 }
 
 #[handler]
@@ -35,14 +45,11 @@ async fn list_objects_v1(req: &mut Request, res: &mut Response) {
     let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
     match list_azure_objects(site_id.clone(), prefix.clone(), max_keys, None).await {
         Ok(objects) => {
-            // print object json
-            // print!("{}", serde_json::to_string(&objects).unwrap());
             res.status_code(StatusCode::OK).render(Text::Xml(
                 generate_s3_list_objects_v2_response(site_id, prefix, objects, false),
             ));
         }
         Err(err) => {
-            print!("{}", err.to_string());
             res.status_code(StatusCode::INTERNAL_SERVER_ERROR)
                 .render(Text::Plain(err.to_string()));
         }
@@ -53,7 +60,7 @@ async fn list_objects_v1(req: &mut Request, res: &mut Response) {
 async fn get_object(req: &mut Request, res: &mut Response) {
     let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
     let key = req.params().get("**path").cloned().unwrap_or_default();
-    match get_azure_object(site_id.clone(), key.clone()).await {
+    match get_azure_object_data(site_id.clone(), key.clone()).await {
         Ok(result) => {
             res.headers_mut()
                 .insert("Content-Type", result.content_type.parse().unwrap());
@@ -75,17 +82,13 @@ async fn main() {
         .push(Router::with_path("<**path>").head(head_handler))
         .push(Router::with_path("status").get(ok_handler))
         .push(
-            Router::with_filter_fn(|req, _| req.query::<i8>("list-type").unwrap_or(0).eq(&2))
-                .get(list_objects_v1),
+            Router::with_filter_fn(|req, _| {
+                req.query::<i8>("list-type").is_none()
+                    && req.query::<String>("prefix").is_some()
+                    && req.query::<String>("delimiter").is_some()
+            })
+            .get(list_objects_v1),
         )
-        // .push(
-        //     Router::with_filter_fn(|req, _| {
-        //         req.query::<i8>("list-type").is_none()
-        //             && req.query::<i8>("prefix").is_some()
-        //             && req.query::<i8>("delimiter").is_some()
-        //     })
-        //     .get(list_objects_v2),
-        // )
         .push(Router::with_path("<**path>").get(get_object))
         .goal(bad_request_handler);
     let service = Service::new(router).hoop(Logger::new());

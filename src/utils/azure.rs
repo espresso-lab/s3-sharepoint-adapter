@@ -1,6 +1,6 @@
 use std::env;
 
-use reqwest::{Client, Error};
+use reqwest::{Client, Error, StatusCode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
@@ -142,7 +142,38 @@ pub async fn list_azure_objects(
     }
 }
 
-pub async fn get_azure_object(
+pub async fn head_azure_object(site_id: String, file_path: String) -> Result<StatusCode, Error> {
+    match get_token().await {
+        Ok(token) => {
+            let url = format!(
+                "https://graph.microsoft.com/v1.0/sites/{}/drive/root:/{}",
+                site_id, file_path
+            );
+            let client = Client::new();
+            match client
+                .get(url)
+                .header("Authorization", format!("Bearer {}", token))
+                .send()
+                .await
+                .unwrap()
+                .json::<Item>()
+                .await
+            {
+                Ok(result) => {
+                    if result.folder.is_some() {
+                        Ok(StatusCode::NOT_FOUND)
+                    } else {
+                        Ok(StatusCode::OK)
+                    }
+                }
+                Err(err) => Err(err),
+            }
+        }
+        Err(err) => Err(err),
+    }
+}
+
+pub async fn get_azure_object_data(
     site_id: String,
     file_path: String,
 ) -> Result<GetAzureObjectResponse, Error> {
