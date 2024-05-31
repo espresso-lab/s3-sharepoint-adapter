@@ -102,10 +102,18 @@ async fn main() {
 
     let router = Router::new()
         .push(Router::with_path("status").get(ok_handler))
-        .push(Router::with_path("/listObjectsV2").post(list_objects_v2))
+        .push(
+            Router::with_filter_fn(|req, _| {
+                req.query::<i8>("list-type").is_none() && req.query::<i64>("max-keys").is_some()
+            })
+            .get(list_objects_v1),
+        )
+        .push(
+            Router::with_filter_fn(|req, _| req.query::<i8>("list-type").unwrap_or(0).eq(&2))
+                .get(list_objects_v1), // TODO: v2
+        )
         .push(Router::with_path("/getObject").post(get_object))
         .push(Router::with_path("<**key>").get(get_object_v1))
-        .get(list_objects_v1)
         .goal(ok_handler);
     let service = Service::new(router).hoop(Logger::new());
     let acceptor = TcpListener::new("0.0.0.0:3000").bind().await;
