@@ -14,6 +14,11 @@ async fn ok_handler(res: &mut Response) {
 }
 
 #[handler]
+async fn head_handler(res: &mut Response) {
+    res.status_code(StatusCode::OK);
+}
+
+#[handler]
 async fn list_objects_v1(req: &mut Request, res: &mut Response) {
     let prefix = req.query::<String>("prefix").unwrap_or("/".to_string());
     let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
