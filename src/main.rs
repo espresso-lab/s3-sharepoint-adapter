@@ -172,7 +172,7 @@ async fn main() {
         .hoop_when(auth_ip_whitelisting, move |_, _| -> bool {
             !WHITELISTED_IPS.is_empty()
         })
-        .push(Router::with_path("/search").post(search_handler))
+        .push(Router::with_path("search").post(search_handler))
         .push(Router::with_path("<**path>").head(head_handler))
         .push(
             Router::with_filter_fn(|req, _| {
