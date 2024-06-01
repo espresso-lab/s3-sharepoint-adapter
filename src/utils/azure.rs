@@ -166,11 +166,21 @@ pub async fn head_azure_object(
 ) -> Result<HeadAzureObjectResponse, Error> {
     let filename_pattern = env::var("FILENAME_PATTERN").unwrap_or("".to_string());
     let regex = Regex::new(&filename_pattern).unwrap();
+    let part = if file_path.is_empty() || file_path.eq("/") {
+        ""
+    } else {
+        ":/"
+    };
+    let key = if file_path.is_empty() {
+        "/".to_string()
+    } else {
+        file_path.clone()
+    };
     match get_token().await {
         Ok(token) => {
             let url = format!(
-                "https://graph.microsoft.com/v1.0/sites/{}/drive/root:/{}",
-                site_id, file_path
+                "https://graph.microsoft.com/v1.0/sites/{}/drive/root{}{}",
+                site_id, part, key
             );
             let client = Client::new();
             match client
