@@ -157,7 +157,12 @@ async fn get_object(req: &mut Request, res: &mut Response) {
 
 #[handler]
 async fn auth_ip_whitelisting(req: &mut Request, res: &mut Response) {
-    if false == WHITELISTED_IPS.contains(&req.header::<String>("X-Forwarded-For").unwrap()) {
+    if false
+        == WHITELISTED_IPS.contains(
+            &req.header::<String>("X-Forwarded-For")
+                .unwrap_or("".to_string()),
+        )
+    {
         res.status_code(StatusCode::FORBIDDEN);
     }
 }

@@ -75,19 +75,19 @@ pub struct File {
 fn prepare_prefix(prefix: String, search_query: String) -> String {
     if prefix == "/" || prefix.is_empty() {
         if search_query.is_empty() {
-            format!("/:/children")
+            format!("/children")
         } else {
-            format!("/:/search(q='{}')", search_query)
+            format!("/search(q='{}')", search_query)
         }
     } else {
         if search_query.is_empty() {
             format!(
-                "/{}:/children",
+                ":/{}:/children",
                 prefix.trim_start_matches("/").trim_end_matches("/")
             )
         } else {
             format!(
-                "/{}:/search(q='{}')",
+                ":/{}:/search(q='{}')",
                 prefix.trim_start_matches("/").trim_end_matches("/"),
                 search_query
             )
@@ -136,9 +136,10 @@ pub async fn list_azure_objects(
         Ok(token) => {
             let relative_path = prepare_prefix(prefix, search_query.clone());
             let url = format!(
-                "https://graph.microsoft.com/v1.0/sites/{}/drive/root:{}?$top={}",
+                "https://graph.microsoft.com/v1.0/sites/{}/drive/root{}?$top={}",
                 site_id, relative_path, max_keys
             );
+            println!("{}", url);
             let client = Client::new();
             match client
                 .get(url)
@@ -182,6 +183,7 @@ pub async fn head_azure_object(
                 "https://graph.microsoft.com/v1.0/sites/{}/drive/root{}{}",
                 site_id, part, key
             );
+            println!("{}", url);
             let client = Client::new();
             match client
                 .get(url)
@@ -193,7 +195,7 @@ pub async fn head_azure_object(
                 .await
             {
                 Ok(result) => {
-                    if file_path.ends_with('/') {
+                    if key.ends_with('/') {
                         if result.folder.is_some() {
                             Ok(HeadAzureObjectResponse {
                                 content_type: "application/xml".to_string(),
