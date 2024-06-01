@@ -1,7 +1,15 @@
 use std::env;
 
+use regex::Regex;
 use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
+
+#[derive(Deserialize, Debug)]
+pub struct SearchRequest {
+    pub query: String,
+    pub prefix: String,
+    pub max_keys: Option<u16>,
+}
 
 #[derive(Deserialize, Debug)]
 struct TokenResponse {
@@ -35,6 +43,8 @@ pub struct Item {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "eTag")]
     pub e_tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "lastModifiedDateTime")]
@@ -118,13 +128,13 @@ pub async fn get_token() -> Result<String, Error> {
 pub async fn list_azure_objects(
     site_id: String,
     prefix: String,
-    max_keys: i16,
+    max_keys: u16,
     search_query: Option<String>,
 ) -> Result<SharePointObjects, Error> {
     let search_query = search_query.unwrap_or("".to_string());
     match get_token().await {
         Ok(token) => {
-            let relative_path = prepare_prefix(prefix, search_query);
+            let relative_path = prepare_prefix(prefix, search_query.clone());
             let url = format!(
                 "https://graph.microsoft.com/v1.0/sites/{}/drive/root:{}?$top={}",
                 site_id, relative_path, max_keys
@@ -154,6 +164,8 @@ pub async fn head_azure_object(
     site_id: String,
     file_path: String,
 ) -> Result<HeadAzureObjectResponse, Error> {
+    let filename_pattern = env::var("FILENAME_PATTERN").unwrap_or("".to_string());
+    let regex = Regex::new(&filename_pattern).unwrap();
     match get_token().await {
         Ok(token) => {
             let url = format!(
@@ -187,6 +199,13 @@ pub async fn head_azure_object(
                         }
                     } else {
                         if result.file.is_some() {
+                            if !regex.is_match(&result.name) {
+                                return Ok(HeadAzureObjectResponse {
+                                    content_type: "application/xml".to_string(),
+                                    status_code: 403,
+                                    size: 0,
+                                });
+                            }
                             Ok(HeadAzureObjectResponse {
                                 content_type: result.file.unwrap().mime_type,
                                 status_code: 200,

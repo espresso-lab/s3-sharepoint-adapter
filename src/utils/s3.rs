@@ -2,7 +2,6 @@ use super::azure::SharePointObjects;
 use regex::Regex;
 use std::env;
 use std::io::Cursor;
-use tracing::error;
 use xml::writer::XmlEvent;
 use xml::EmitterConfig;
 
@@ -14,7 +13,6 @@ pub fn generate_s3_list_objects_v2_response(
 ) -> String {
     let filename_pattern = env::var("FILENAME_PATTERN").unwrap_or("".to_string());
     let regex = Regex::new(&filename_pattern).unwrap();
-    error!("Filename pattern: {}", filename_pattern);
     let mut buffer = Cursor::new(Vec::new());
     let mut writer = EmitterConfig::new()
         .perform_indent(true)
