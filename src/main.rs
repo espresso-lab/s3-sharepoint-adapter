@@ -182,9 +182,9 @@ async fn main() {
         .push(
             Router::with_filter_fn(|req, _| {
                 req.query::<i8>("list-type").is_none()
-                    && req.query::<String>("prefix").is_some()
-                    && (req.query::<String>("delimiter").is_some()
-                        || req.query::<String>("max-keys").is_some())
+                    && (req.query::<String>("prefix").is_some()
+                        || (req.query::<String>("delimiter").is_some()
+                            || req.query::<String>("max-keys").is_some()))
             })
             .get(list_objects_v1),
         )
