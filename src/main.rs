@@ -174,21 +174,24 @@ async fn main() {
 
     let router = Router::new()
         .push(Router::with_path("status").get(ok_handler))
-        .hoop_when(auth_ip_whitelisting, move |_, _| -> bool {
-            !WHITELISTED_IPS.is_empty()
-        })
-        .push(Router::with_path("search").post(search_handler))
-        .push(Router::with_path("<**path>").head(head_handler))
         .push(
-            Router::with_filter_fn(|req, _| {
-                req.query::<i8>("list-type").is_none()
-                    && (req.query::<String>("prefix").is_some()
-                        || (req.query::<String>("delimiter").is_some()
-                            || req.query::<String>("max-keys").is_some()))
-            })
-            .get(list_objects_v1),
+            Router::new()
+                .hoop_when(auth_ip_whitelisting, move |_, _| -> bool {
+                    !WHITELISTED_IPS.is_empty()
+                })
+                .push(Router::with_path("search").post(search_handler))
+                .push(Router::with_path("<**path>").head(head_handler))
+                .push(
+                    Router::with_filter_fn(|req, _| {
+                        req.query::<i8>("list-type").is_none()
+                            && (req.query::<String>("prefix").is_some()
+                                || (req.query::<String>("delimiter").is_some()
+                                    || req.query::<String>("max-keys").is_some()))
+                    })
+                    .get(list_objects_v1),
+                )
+                .push(Router::with_path("<**path>").get(get_object)),
         )
-        .push(Router::with_path("<**path>").get(get_object))
         .goal(bad_request_handler);
     let service = Service::new(router).hoop(Logger::new());
     let acceptor = TcpListener::new("0.0.0.0:3000").bind().await;
