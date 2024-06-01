@@ -1,5 +1,8 @@
 use super::azure::SharePointObjects;
+use regex::Regex;
+use std::env;
 use std::io::Cursor;
+use tracing::error;
 use xml::writer::XmlEvent;
 use xml::EmitterConfig;
 
@@ -9,6 +12,9 @@ pub fn generate_s3_list_objects_v2_response(
     objects: SharePointObjects,
     files_only: bool,
 ) -> String {
+    let filename_pattern = env::var("FILENAME_PATTERN").unwrap_or("".to_string());
+    let regex = Regex::new(&filename_pattern).unwrap();
+    error!("Filename pattern: {}", filename_pattern);
     let mut buffer = Cursor::new(Vec::new());
     let mut writer = EmitterConfig::new()
         .perform_indent(true)
@@ -73,7 +79,11 @@ pub fn generate_s3_list_objects_v2_response(
 
     writer.write(XmlEvent::end_element()).unwrap(); // Contents
 
-    for item in objects.items.iter().filter(|item| item.file.is_some()) {
+    for item in objects
+        .items
+        .iter()
+        .filter(|item| item.file.is_some() && regex.is_match(&item.name.to_lowercase()))
+    {
         writer.write(XmlEvent::start_element("Contents")).unwrap();
 
         writer.write(XmlEvent::start_element("Key")).unwrap();
