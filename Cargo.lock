@@ -1153,6 +1153,7 @@ name = "s3-sharepoint-adapter"
 version = "0.1.0"
 dependencies = [
  "dotenv",
+ "once_cell",
  "reqwest",
  "salvo",
  "serde",

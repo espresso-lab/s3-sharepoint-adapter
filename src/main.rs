@@ -3,10 +3,24 @@ mod utils;
 use std::env;
 
 use dotenv::dotenv;
+use once_cell::sync::Lazy;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
+use tracing::info;
 use utils::azure::{get_azure_object_data, head_azure_object, list_azure_objects};
 use utils::s3::generate_s3_list_objects_v2_response;
+
+// Get whitelisted ips
+static WHITELISTED_IPS: Lazy<Vec<String>> = Lazy::new(|| match env::var("WHITELISTED_IPS") {
+    Ok(val) => {
+        info!("Whitelisting IPs: {}", val);
+        val.split(",").map(|s| s.to_string()).collect()
+    }
+    Err(_) => {
+        info!("IP Whitelisting disabled.");
+        vec![]
+    }
+});
 
 #[handler]
 async fn ok_handler(res: &mut Response) {
@@ -86,14 +100,24 @@ async fn get_object(req: &mut Request, res: &mut Response) {
     }
 }
 
+#[handler]
+async fn auth_ip_whitelisting(req: &mut Request, res: &mut Response) {
+    if false == WHITELISTED_IPS.contains(&req.header::<String>("X-Forwarded-For").unwrap()) {
+        res.status_code(StatusCode::FORBIDDEN);
+    }
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok();
     tracing_subscriber::fmt().init();
 
     let router = Router::new()
-        .push(Router::with_path("<**path>").head(head_handler))
         .push(Router::with_path("status").get(ok_handler))
+        .hoop_when(auth_ip_whitelisting, move |_, _| -> bool {
+            !WHITELISTED_IPS.is_empty()
+        })
+        .push(Router::with_path("<**path>").head(head_handler))
         .push(
             Router::with_filter_fn(|req, _| {
                 req.query::<i8>("list-type").is_none()
