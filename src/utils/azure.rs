@@ -1,6 +1,6 @@
 use std::env;
 
-use reqwest::{Client, Error, StatusCode};
+use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
@@ -12,6 +12,14 @@ struct TokenResponse {
 pub struct GetAzureObjectResponse {
     pub content_type: String,
     pub data: Vec<u8>,
+    pub file_name: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct HeadAzureObjectResponse {
+    pub content_type: String,
+    pub status_code: u16,
+    pub size: u64,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -142,7 +150,10 @@ pub async fn list_azure_objects(
     }
 }
 
-pub async fn head_azure_object(site_id: String, file_path: String) -> Result<StatusCode, Error> {
+pub async fn head_azure_object(
+    site_id: String,
+    file_path: String,
+) -> Result<HeadAzureObjectResponse, Error> {
     match get_token().await {
         Ok(token) => {
             let url = format!(
@@ -160,10 +171,34 @@ pub async fn head_azure_object(site_id: String, file_path: String) -> Result<Sta
                 .await
             {
                 Ok(result) => {
-                    if result.folder.is_some() {
-                        Ok(StatusCode::NOT_FOUND)
+                    if file_path.ends_with('/') {
+                        if result.folder.is_some() {
+                            Ok(HeadAzureObjectResponse {
+                                content_type: "application/xml".to_string(),
+                                status_code: 200,
+                                size: 0,
+                            })
+                        } else {
+                            Ok(HeadAzureObjectResponse {
+                                content_type: "application/xml".to_string(),
+                                status_code: 404,
+                                size: 0,
+                            })
+                        }
                     } else {
-                        Ok(StatusCode::OK)
+                        if result.file.is_some() {
+                            Ok(HeadAzureObjectResponse {
+                                content_type: result.file.unwrap().mime_type,
+                                status_code: 200,
+                                size: result.size.unwrap_or(0),
+                            })
+                        } else {
+                            Ok(HeadAzureObjectResponse {
+                                content_type: "application/xml".to_string(),
+                                status_code: 404,
+                                size: 0,
+                            })
+                        }
                     }
                 }
                 Err(err) => Err(err),
@@ -183,6 +218,7 @@ pub async fn get_azure_object_data(
                 "https://graph.microsoft.com/v1.0/sites/{}/drive/root:/{}:/content",
                 site_id, file_path
             );
+            let file_name = file_path.split('/').last().unwrap_or_default();
             let client = Client::new();
             match client
                 .get(url)
@@ -199,6 +235,7 @@ pub async fn get_azure_object_data(
                         .unwrap()
                         .to_string(),
                     data: objects.bytes().await.unwrap().to_vec(),
+                    file_name: file_name.to_string(),
                 }),
                 Err(err) => Err(err),
             }

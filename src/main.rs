@@ -1,6 +1,6 @@
 mod utils;
 
-use std::{env, result};
+use std::env;
 
 use dotenv::dotenv;
 use salvo::http::StatusCode;
@@ -25,17 +25,18 @@ async fn head_handler(req: &mut Request, res: &mut Response) {
     let key = req.params().get("**path").cloned().unwrap_or_default();
     match head_azure_object(site_id.clone(), key.clone()).await {
         Ok(result) => {
-            if result == StatusCode::NOT_FOUND {
-                res.headers_mut()
-                    .insert("Content-Length", "0".parse().unwrap());
-                res.headers_mut()
-                    .insert("Content-Type", "application/octet-stream".parse().unwrap());
-            }
-            res.status_code(StatusCode::OK);
+            res.headers_mut()
+                .insert("Content-Type", result.content_type.parse().unwrap());
+            res.headers_mut()
+                .insert("Content-Length", result.size.to_string().parse().unwrap());
+            res.status_code(StatusCode::from_u16(result.status_code).unwrap());
         }
-        Err(err) => {
-            res.status_code(StatusCode::INTERNAL_SERVER_ERROR)
-                .render(Text::Plain(err.to_string()));
+        Err(_) => {
+            res.headers_mut()
+                .insert("Content-Type", "application/xml".parse().unwrap());
+            res.headers_mut()
+                .insert("Content-Length", "0".parse().unwrap());
+            res.status_code(StatusCode::NOT_FOUND);
         }
     }
 }
@@ -70,6 +71,12 @@ async fn get_object(req: &mut Request, res: &mut Response) {
         Ok(result) => {
             res.headers_mut()
                 .insert("Content-Type", result.content_type.parse().unwrap());
+            res.headers_mut().insert(
+                "Content-Disposition",
+                format!("attachment; filename=\"{}\"", result.file_name)
+                    .parse()
+                    .unwrap(),
+            );
             let _ = res.write_body(result.data);
         }
         Err(err) => {
@@ -91,7 +98,8 @@ async fn main() {
             Router::with_filter_fn(|req, _| {
                 req.query::<i8>("list-type").is_none()
                     && req.query::<String>("prefix").is_some()
-                    && req.query::<String>("delimiter").is_some()
+                    && (req.query::<String>("delimiter").is_some()
+                        || req.query::<String>("max-keys").is_some())
             })
             .get(list_objects_v1),
         )

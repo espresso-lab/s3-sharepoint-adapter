@@ -23,7 +23,9 @@ pub fn generate_s3_list_objects_v2_response(
     writer.write(XmlEvent::end_element()).unwrap(); // Name
 
     writer.write(XmlEvent::start_element("Prefix")).unwrap();
-    writer.write(XmlEvent::characters(&prefix)).unwrap();
+    writer
+        .write(XmlEvent::characters(&format!("{}/", &prefix)))
+        .unwrap();
     writer.write(XmlEvent::end_element()).unwrap(); // Prefix
 
     writer
@@ -48,7 +50,7 @@ pub fn generate_s3_list_objects_v2_response(
             writer.write(XmlEvent::start_element("Prefix")).unwrap();
             writer
                 .write(XmlEvent::characters(&format!(
-                    "{}/{}",
+                    "{}/{}/",
                     &prefix, &folder.name
                 )))
                 .unwrap();
@@ -56,6 +58,20 @@ pub fn generate_s3_list_objects_v2_response(
             writer.write(XmlEvent::end_element()).unwrap(); // CommonPrefixes
         }
     }
+
+    writer.write(XmlEvent::start_element("Contents")).unwrap();
+
+    writer.write(XmlEvent::start_element("Key")).unwrap();
+    writer
+        .write(XmlEvent::characters(&format!("{}/", &prefix)))
+        .unwrap();
+    writer.write(XmlEvent::end_element()).unwrap(); // Key
+
+    writer.write(XmlEvent::start_element("Size")).unwrap();
+    writer.write(XmlEvent::characters("0")).unwrap();
+    writer.write(XmlEvent::end_element()).unwrap(); // Size
+
+    writer.write(XmlEvent::end_element()).unwrap(); // Contents
 
     for item in objects.items.iter().filter(|item| item.file.is_some()) {
         writer.write(XmlEvent::start_element("Contents")).unwrap();
