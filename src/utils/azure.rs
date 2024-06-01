@@ -139,7 +139,6 @@ pub async fn list_azure_objects(
                 "https://graph.microsoft.com/v1.0/sites/{}/drive/root{}?$top={}",
                 site_id, relative_path, max_keys
             );
-            println!("{}", url);
             let client = Client::new();
             match client
                 .get(url)
@@ -151,10 +150,7 @@ pub async fn list_azure_objects(
                 .await
             {
                 Ok(objects) => Ok(objects),
-                Err(err) => {
-                    println!("{}", err.to_string());
-                    Err(err)
-                }
+                Err(err) => Err(err),
             }
         }
         Err(err) => Err(err),
@@ -183,7 +179,6 @@ pub async fn head_azure_object(
                 "https://graph.microsoft.com/v1.0/sites/{}/drive/root{}{}",
                 site_id, part, key
             );
-            println!("{}", url);
             let client = Client::new();
             match client
                 .get(url)
