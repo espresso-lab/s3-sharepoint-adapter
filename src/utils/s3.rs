@@ -12,6 +12,15 @@ pub fn generate_s3_list_objects_v2_response(
     objects: SharePointObjects,
     files_only: bool,
 ) -> String {
+    let prefix = if prefix.is_empty() || prefix == "/" {
+        "".to_string()
+    } else {
+        prefix
+            .trim_start_matches("/")
+            .trim_end_matches("/")
+            .to_string()
+            + "/"
+    };
     let filename_pattern = config().filename_pattern.clone();
     let regex = Regex::new(&filename_pattern).unwrap();
     let mut buffer = Cursor::new(Vec::new());
@@ -31,7 +40,7 @@ pub fn generate_s3_list_objects_v2_response(
     writer
         .write(XmlEvent::characters(&format!(
             "{}/",
-            &prefix.trim_start_matches("/")
+            &prefix.trim_end_matches("/")
         )))
         .unwrap();
     writer.write(XmlEvent::end_element()).unwrap(); // Prefix
@@ -58,9 +67,8 @@ pub fn generate_s3_list_objects_v2_response(
             writer.write(XmlEvent::start_element("Prefix")).unwrap();
             writer
                 .write(XmlEvent::characters(&format!(
-                    "{}/{}/",
-                    &prefix.trim_start_matches("/"),
-                    &folder.name
+                    "{}{}/",
+                    &prefix, &folder.name
                 )))
                 .unwrap();
             writer.write(XmlEvent::end_element()).unwrap(); // Prefix
@@ -74,7 +82,7 @@ pub fn generate_s3_list_objects_v2_response(
     writer
         .write(XmlEvent::characters(&format!(
             "{}/",
-            &prefix.trim_start_matches("/")
+            &prefix.trim_end_matches("/")
         )))
         .unwrap();
     writer.write(XmlEvent::end_element()).unwrap(); // Key
@@ -94,11 +102,7 @@ pub fn generate_s3_list_objects_v2_response(
 
         writer.write(XmlEvent::start_element("Key")).unwrap();
         writer
-            .write(XmlEvent::characters(&format!(
-                "{}/{}",
-                &prefix.trim_start_matches("/"),
-                &item.name
-            )))
+            .write(XmlEvent::characters(&format!("{}{}", &prefix, &item.name)))
             .unwrap();
         writer.write(XmlEvent::end_element()).unwrap(); // Key
 
