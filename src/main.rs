@@ -9,6 +9,7 @@ use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
+use tracing::warn;
 use urlencoding::decode;
 use utils::azure::{get_azure_object_data, head_azure_object, list_azure_objects, SearchRequest};
 use utils::s3::generate_s3_list_objects_v2_response;
@@ -32,6 +33,9 @@ struct Conf {
 
     #[config(env = "WHITELISTED_IPS")]
     whitelisted_ips: Option<String>,
+
+    #[config(env = "API_TOKEN")]
+    api_token: Option<String>,
 }
 
 fn config() -> &'static Conf {
@@ -170,14 +174,38 @@ async fn get_object(req: &mut Request, res: &mut Response) {
 }
 
 #[handler]
-async fn auth_ip_whitelisting(req: &mut Request, res: &mut Response) {
-    if false
-        == config().whitelisted_ips.as_ref().unwrap().contains(
-            &req.header::<String>("X-Forwarded-For")
-                .unwrap_or("".to_string()),
-        )
+async fn auth_handler(req: &mut Request, res: &mut Response) {
+    let whitelisted_ips = config().whitelisted_ips.clone();
+    let req_ip = req
+        .header::<String>("X-Forwarded-For")
+        .unwrap_or("".to_string());
+
+    let api_token = config().api_token.clone().expect("API Token not set");
+    let req_token = req
+        .header::<String>("Authorization")
+        .unwrap_or("".to_string())
+        .split(' ')
+        .last()
+        .unwrap_or("")
+        .to_string();
+
+    if whitelisted_ips
+        .clone()
+        .is_some_and(|ip| !ip.contains(&req_ip) || req_ip.is_empty())
     {
+        warn!(
+            "Invalid ip {}: {}",
+            whitelisted_ips.unwrap_or("".to_string()),
+            req_ip
+        );
         res.status_code(StatusCode::FORBIDDEN);
+        return;
+    }
+
+    if api_token.clone().ne(&req_token) {
+        warn!("Invalid api token {}: {}", api_token, req_token);
+        res.status_code(StatusCode::FORBIDDEN);
+        return;
     }
 }
 
@@ -190,9 +218,7 @@ async fn main() {
         .push(Router::with_path("status").get(ok_handler))
         .push(
             Router::new()
-                .hoop_when(auth_ip_whitelisting, |_, _| {
-                    config().whitelisted_ips.is_some()
-                })
+                .hoop(auth_handler)
                 .push(Router::with_path("search").post(search_handler))
                 .push(Router::with_path("<**path>").head(head_handler))
                 .push(
