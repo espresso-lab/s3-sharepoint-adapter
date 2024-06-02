@@ -1,36 +1,49 @@
 mod utils;
 
-use std::env;
 use std::path::Path;
 
+use confique::Config;
 use dotenv::dotenv;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use salvo::http::StatusCode;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use std::sync::OnceLock;
 use urlencoding::decode;
 use utils::azure::{get_azure_object_data, head_azure_object, list_azure_objects, SearchRequest};
 use utils::s3::generate_s3_list_objects_v2_response;
+
+#[derive(Config)]
+struct Conf {
+    #[config(env = "APP_CLIENT_ID")]
+    app_client_id: String,
+
+    #[config(env = "APP_CLIENT_SECRET")]
+    app_client_secret: String,
+
+    #[config(env = "TENANT")]
+    tenant: String,
+
+    #[config(env = "SHAREPOINT_SITE_ID")]
+    sharepoint_site_id: String,
+
+    #[config(env = "FILENAME_PATTERN", default = "")]
+    filename_pattern: String,
+
+    #[config(env = "WHITELISTED_IPS")]
+    whitelisted_ips: Option<String>,
+}
+
+fn config() -> &'static Conf {
+    static CONFIG: OnceLock<Conf> = OnceLock::new();
+    CONFIG.get_or_init(|| Conf::builder().env().load().unwrap())
+}
 
 #[derive(Deserialize, Serialize, Debug)]
 struct SearchResult {
     file_name: String,
     file_path: String,
 }
-
-// Get whitelisted ips
-static WHITELISTED_IPS: Lazy<Vec<String>> = Lazy::new(|| match env::var("WHITELISTED_IPS") {
-    Ok(val) => {
-        info!("Whitelisting IPs: {}", val);
-        val.split(",").map(|s| s.to_string()).collect()
-    }
-    Err(_) => {
-        info!("IP Whitelisting disabled.");
-        vec![]
-    }
-});
 
 #[handler]
 async fn ok_handler(res: &mut Response) {
@@ -45,7 +58,8 @@ async fn bad_request_handler(res: &mut Response) {
 
 #[handler]
 async fn head_handler(req: &mut Request, res: &mut Response) {
-    let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
+    let site_id = config().sharepoint_site_id.clone();
+
     let key = req.params().get("**path").cloned().unwrap_or_default();
     match head_azure_object(site_id.clone(), key.clone()).await {
         Ok(result) => {
@@ -73,7 +87,7 @@ async fn list_objects_v1(req: &mut Request, res: &mut Response) {
         .trim_end_matches("/")
         .to_string();
     let max_keys = req.query::<u16>("max-keys").unwrap_or(1000);
-    let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
+    let site_id = config().sharepoint_site_id.clone();
     match list_azure_objects(site_id.clone(), prefix.clone(), max_keys, None).await {
         Ok(objects) => {
             res.status_code(StatusCode::OK).render(Text::Xml(
@@ -90,7 +104,7 @@ async fn list_objects_v1(req: &mut Request, res: &mut Response) {
 #[handler]
 async fn search_handler(req: &mut Request, res: &mut Response) {
     let payload = req.parse_json::<SearchRequest>().await.unwrap();
-    let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
+    let site_id = config().sharepoint_site_id.clone();
     match list_azure_objects(
         site_id.clone(),
         payload.prefix.clone(),
@@ -100,7 +114,7 @@ async fn search_handler(req: &mut Request, res: &mut Response) {
     .await
     {
         Ok(objects) => {
-            let filename_pattern = env::var("FILENAME_PATTERN").unwrap_or("".to_string());
+            let filename_pattern = config().filename_pattern.clone();
             let regex = Regex::new(&filename_pattern).unwrap();
             let search_results = objects
                 .items
@@ -128,9 +142,9 @@ async fn search_handler(req: &mut Request, res: &mut Response) {
 
 #[handler]
 async fn get_object(req: &mut Request, res: &mut Response) {
-    let filename_pattern = env::var("FILENAME_PATTERN").unwrap_or("".to_string());
+    let filename_pattern = config().filename_pattern.clone();
     let regex = Regex::new(&filename_pattern).unwrap();
-    let site_id = env::var("SHAREPOINT_SITE_ID").expect("SHAREPOINT_SITE_ID not found");
+    let site_id = config().sharepoint_site_id.clone();
     let key = req.params().get("**path").cloned().unwrap_or_default();
     if !regex.is_match(&key) {
         res.status_code(StatusCode::FORBIDDEN);
@@ -158,7 +172,7 @@ async fn get_object(req: &mut Request, res: &mut Response) {
 #[handler]
 async fn auth_ip_whitelisting(req: &mut Request, res: &mut Response) {
     if false
-        == WHITELISTED_IPS.contains(
+        == config().whitelisted_ips.as_ref().unwrap().contains(
             &req.header::<String>("X-Forwarded-For")
                 .unwrap_or("".to_string()),
         )
@@ -176,8 +190,8 @@ async fn main() {
         .push(Router::with_path("status").get(ok_handler))
         .push(
             Router::new()
-                .hoop_when(auth_ip_whitelisting, move |_, _| -> bool {
-                    !WHITELISTED_IPS.is_empty()
+                .hoop_when(auth_ip_whitelisting, |_, _| {
+                    config().whitelisted_ips.is_some()
                 })
                 .push(Router::with_path("search").post(search_handler))
                 .push(Router::with_path("<**path>").head(head_handler))

@@ -1,6 +1,7 @@
+use crate::config;
+
 use super::azure::SharePointObjects;
 use regex::Regex;
-use std::env;
 use std::io::Cursor;
 use xml::writer::XmlEvent;
 use xml::EmitterConfig;
@@ -11,7 +12,7 @@ pub fn generate_s3_list_objects_v2_response(
     objects: SharePointObjects,
     files_only: bool,
 ) -> String {
-    let filename_pattern = env::var("FILENAME_PATTERN").unwrap_or("".to_string());
+    let filename_pattern = config().filename_pattern.clone();
     let regex = Regex::new(&filename_pattern).unwrap();
     let mut buffer = Cursor::new(Vec::new());
     let mut writer = EmitterConfig::new()

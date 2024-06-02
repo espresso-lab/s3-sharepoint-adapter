@@ -1,8 +1,8 @@
-use std::env;
-
 use regex::Regex;
 use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
+
+use crate::config;
 
 #[derive(Deserialize, Debug)]
 pub struct SearchRequest {
@@ -96,9 +96,10 @@ fn prepare_prefix(prefix: String, search_query: String) -> String {
 }
 
 pub async fn get_token() -> Result<String, Error> {
-    let tenant = env::var("TENANT").expect("TENANT not found");
-    let client_id = env::var("APP_CLIENT_ID").expect("APP_CLIENT_ID not found");
-    let client_secret = env::var("APP_CLIENT_SECRET").expect("APP_CLIENT_SECRET not found");
+    let tenant = config().tenant.clone();
+    let client_id = config().app_client_id.clone();
+    let client_secret = config().app_client_secret.clone();
+
     let url = format!(
         "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
         tenant
@@ -161,7 +162,7 @@ pub async fn head_azure_object(
     site_id: String,
     file_path: String,
 ) -> Result<HeadAzureObjectResponse, Error> {
-    let filename_pattern = env::var("FILENAME_PATTERN").unwrap_or("".to_string());
+    let filename_pattern = config().filename_pattern.clone();
     let regex = Regex::new(&filename_pattern).unwrap();
     let part = if file_path.is_empty() || file_path.eq("/") {
         ""
