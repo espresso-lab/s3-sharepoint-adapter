@@ -6,7 +6,7 @@ use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::config;
 
@@ -180,7 +180,7 @@ async fn get_token() -> Result<String, Error> {
 
     let mut token_data = TOKEN_DATA.lock().await;
     *token_data = Some(new_token_data.clone());
-    info!("New token fetched and stored");
+    debug!("New token fetched and stored");
 
     Ok(new_token_data.access_token)
 }

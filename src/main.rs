@@ -31,9 +31,6 @@ struct Conf {
     #[config(env = "FILENAME_PATTERN", default = "")]
     filename_pattern: String,
 
-    #[config(env = "WHITELISTED_IPS")]
-    whitelisted_ips: Option<String>,
-
     #[config(env = "API_TOKEN")]
     api_token: Option<String>,
 }
@@ -175,11 +172,6 @@ async fn get_object(req: &mut Request, res: &mut Response) {
 
 #[handler]
 async fn auth_handler(req: &mut Request, res: &mut Response) {
-    let whitelisted_ips = config().whitelisted_ips.clone();
-    let req_ip = req
-        .header::<String>("X-Forwarded-For")
-        .unwrap_or("".to_string());
-
     let api_token = config().api_token.clone().expect("API Token not set");
     let req_token = req
         .header::<String>("Authorization")
@@ -188,19 +180,6 @@ async fn auth_handler(req: &mut Request, res: &mut Response) {
         .last()
         .unwrap_or("")
         .to_string();
-
-    if whitelisted_ips
-        .clone()
-        .is_some_and(|ip| !ip.contains(&req_ip) || req_ip.is_empty())
-    {
-        warn!(
-            "Invalid ip {}: {}",
-            whitelisted_ips.unwrap_or("".to_string()),
-            req_ip
-        );
-        res.status_code(StatusCode::FORBIDDEN);
-        return;
-    }
 
     if api_token.clone().ne(&req_token) {
         warn!("Invalid api token {}: {}", api_token, req_token);
