@@ -1,8 +1,23 @@
+use chrono::{DateTime, Utc};
+use jsonwebtoken::{decode, errors::Error as JwtError, Algorithm, DecodingKey, Validation};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::Mutex as AsyncMutex;
+use tracing::info;
 
 use crate::config;
+
+#[derive(Debug, Clone)]
+struct TokenData {
+    access_token: String,
+    expires_at: DateTime<Utc>,
+}
+
+static TOKEN_DATA: Lazy<Arc<AsyncMutex<Option<TokenData>>>> =
+    Lazy::new(|| Arc::new(AsyncMutex::new(None)));
 
 #[derive(Deserialize, Debug)]
 pub struct SearchRequest {
@@ -72,6 +87,11 @@ pub struct File {
     pub mime_type: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct Claims {
+    exp: i64,
+}
+
 fn prepare_prefix(prefix: String, search_query: String) -> String {
     if prefix == "/" || prefix.is_empty() {
         if search_query.is_empty() {
@@ -95,7 +115,21 @@ fn prepare_prefix(prefix: String, search_query: String) -> String {
     }
 }
 
-pub async fn get_token() -> Result<String, Error> {
+fn decode_no_verify(token: &str) -> Result<DateTime<Utc>, JwtError> {
+    let mut no_verify = Validation::new(Algorithm::RS256);
+    no_verify.insecure_disable_signature_validation();
+    no_verify.set_audience(&["https://graph.microsoft.com".to_string()]);
+    match decode::<Claims>(
+        token,
+        &DecodingKey::from_secret("noverify".as_bytes()),
+        &no_verify,
+    ) {
+        Ok(token_data) => Ok(DateTime::from_timestamp(token_data.claims.exp, 0).unwrap()),
+        Err(err) => Err(err),
+    }
+}
+
+async fn fetch_token() -> Result<TokenData, Error> {
     let tenant = config().tenant.clone();
     let client_id = config().app_client_id.clone();
     let client_secret = config().app_client_secret.clone();
@@ -121,9 +155,34 @@ pub async fn get_token() -> Result<String, Error> {
         .json::<TokenResponse>()
         .await
     {
-        Ok(response) => Ok(response.access_token.to_string()),
+        Ok(response) => Ok(TokenData {
+            access_token: response.access_token.clone(),
+            expires_at: decode_no_verify(&response.access_token).unwrap(),
+        }),
         Err(err) => Err(err),
     }
+}
+
+async fn get_token() -> Result<String, Error> {
+    let token_data = TOKEN_DATA.lock().await;
+    if let Some(ref data) = *token_data {
+        if data.expires_at > Utc::now() {
+            info!(
+                "Token is still valid until: {} - UTC Now: {}",
+                data.expires_at,
+                Utc::now()
+            );
+            return Ok(data.access_token.clone());
+        }
+    }
+    drop(token_data); // Explicitly drop to release the lock before fetching new token
+    let new_token_data = fetch_token().await.unwrap();
+
+    let mut token_data = TOKEN_DATA.lock().await;
+    *token_data = Some(new_token_data.clone());
+    info!("New token fetched and stored");
+
+    Ok(new_token_data.access_token)
 }
 
 pub async fn list_azure_objects(

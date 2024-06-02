@@ -18,8 +18,11 @@ tracing-subscriber = "0"
 serde = { version = "1", features = ["derive"], default-features = false }
 serde_json = "1"
 reqwest = { version = "0", features = ["json", "rustls-tls"], default-features = false }
+once_cell = { version = "1", default-features = false }
 dotenv = "0"
 xml-rs = "0"
 regex = "1"
 urlencoding = "2"
 confique = "0"
+chrono = "0.4.38"
+jsonwebtoken = { version = "9.3.0", default-features = false }
